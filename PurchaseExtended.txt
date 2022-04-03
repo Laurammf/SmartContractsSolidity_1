@@ -1,0 +1,151 @@
+//SPDX-License-Identifier: UNLICENSED
+
+/*
+Vogliamo rendere possibile gestire tanti acquisti allo stesso tempo. Però teniamo comunque la limitazione 
+che un buyer può fare solo un acquisto (gli altri sono fatti da altri buyer).
+- Innanzitutto abbaimo bisogno di una struttura dati per memorizzare l'indirizzo di ogni buyer
+e sui soldi che ha pagato. Questa è una struttura identica ai balances della banca. Abbiamo bisogno
+ di una struttura simile per memorizzare lo status di ogni acquisto di ogni buyer e un'altra per proposalTime.
+  indirizzo ogni buyer, soldi che ha pagato, indirizzo del buyer e status dellacquisto, 
+  indirizzo del buyer e proposal time
+- Adesso il concetto di buyer non esiste più, perché chiunque può essere un buyer. Quindi, ogni volta 
+che vogliamo informazioni sullo status o sul tempo, dobbiamo guadare alla struttura dati associata 
+a chi sta facendo la chiamata alla funzione.
+- Ogni volta che il seller o shipper fanno qualcosa, devono indicare chiaramente PER QUALE BUYER 
+stanno agendo.
+- Ovviamente non devi mandare in giro tutti i soldi del contratto, ma solo i soldi indicati 
+nel balance di ogni buyer.
+*/ 
+
+pragma solidity >=0.6;
+contract purchase{
+
+    // qua lascio tutto pubblico per facilitare il mio debugging
+    address public officialShipper;
+    address public newshipper_S;
+    address public newshipper_B;
+    address public dummy;
+    uint public bonifico_min;
+    uint private refund;
+    uint private notRefund;
+    uint public percent;
+    
+    mapping(address=>address) public proposalShipper;
+    mapping(address=>uint) public proposalPrice;
+    mapping(address=>bool) public hasProposal;
+    mapping(address=>StatusType) public proposalStatus;
+    mapping(address=>uint) public proposalTime;
+    mapping(address=>address) public proposalSeller;
+    enum StatusType {Start,Paid,Accepted}
+
+
+    constructor(address s, uint min, uint p){
+        officialShipper = s;
+        bonifico_min=min;
+        percent=p;
+    }
+
+    function propose_and_pay(address seller) public payable{ // sender is buyer
+        require((proposalStatus[msg.sender]==StatusType.Start)&& (msg.value>=bonifico_min));
+        require(! hasProposal[msg.sender]==true);
+        proposalStatus[msg.sender]=StatusType.Paid;
+        proposalTime[msg.sender]=block.timestamp;
+        proposalShipper[msg.sender]=officialShipper;
+        proposalPrice[msg.sender]=msg.value;
+        hasProposal[msg.sender]=true;
+        proposalSeller[msg.sender]=seller;
+    }
+
+
+    function change_seller(address newseller, address buyer) public payable{
+        require(((proposalStatus[buyer]==StatusType.Paid)), "Status non permette");
+        require((proposalSeller[buyer]==msg.sender), "Non sei il venditore ufficiale di questo cliente!");
+        proposalSeller[buyer] = payable(newseller);
+    }
+
+// non funziona:
+    function change_shipper(address newShip, bool isBuyer, uint p) public{
+        if (isBuyer==true){ //msg.sender is the buyer
+            require(((proposalStatus[msg.sender]==StatusType.Paid)||(proposalStatus[msg.sender]==StatusType.Accepted)), "Status non permette");
+            newshipper_B=newShip;
+            dummy = msg.sender;
+        }else { // msg.sender is the seller
+            newshipper_B=newShip;
+        }
+        if (isBuyer==true){ //msg.sender is the buyer
+            if (newshipper_B==newshipper_S){
+                proposalShipper[msg.sender]=newshipper_B;
+            }
+        }else { // msg.sender is the seller
+            if (newshipper_B==newshipper_S){
+                proposalShipper[dummy]=newshipper_B;
+            }
+        }
+    }
+
+    function reject(address buyer) public{
+        require(msg.sender==proposalSeller[buyer]);
+        require(proposalStatus[buyer]==StatusType.Paid, "Status non permette");
+        proposalStatus[buyer]=StatusType.Start;
+    }
+    function accept(address buyer) public{
+        require(msg.sender==proposalSeller[buyer]);
+        require(proposalStatus[buyer]==StatusType.Paid, "Status non permette");
+        proposalStatus[buyer]=StatusType.Accepted;
+    }
+
+    function delivered(address payable buyer) public payable{
+        require(proposalStatus[buyer]==StatusType.Accepted, "status non permette");
+        require(proposalShipper[buyer]==msg.sender, "solo il shipper puo ciccarci");
+        proposalStatus[buyer]=StatusType.Start;
+        payable(proposalSeller[buyer]).transfer(proposalPrice[buyer]);
+        hasProposal[buyer]=false;
+        // cancellare tutto perche il rapporto buyer seller eh finito
+        delete(proposalTime[msg.sender]); 
+        delete(proposalShipper[msg.sender]);
+        delete(proposalPrice[msg.sender]);
+        delete(proposalSeller[msg.sender]); 
+    }
+    function not_delivered(address payable buyer) public payable{
+        require(proposalStatus[buyer]==StatusType.Accepted, "status non permette");
+        require(proposalShipper[buyer]==msg.sender, "solo il shipper puo ciccarci");
+        proposalStatus[buyer]=StatusType.Start;
+        buyer.transfer(proposalPrice[buyer]);
+
+        // cancellare tutto perche il rapporto buyer seller eh finito
+        hasProposal[msg.sender]=false;
+        proposalStatus[msg.sender]=StatusType.Start;
+        delete(proposalTime[msg.sender]); 
+        delete(proposalShipper[msg.sender]);
+        delete(proposalPrice[msg.sender]);
+        delete(proposalSeller[msg.sender]); 
+    }
+    function reclaim() public payable{ //msg.sender eh cliente, input eh venditore
+        require(((proposalStatus[msg.sender]==StatusType.Accepted)||(proposalStatus[msg.sender]==StatusType.Paid)), "Status non permette");
+        require((proposalTime[msg.sender]+180 seconds<= block.timestamp),"Il tempo per dare la risposta none ancora passato!");
+        payable(msg.sender).transfer(proposalPrice[msg.sender]);
+        hasProposal[msg.sender]=false;
+        proposalStatus[msg.sender]=StatusType.Start;
+        // cancellare tutto perche il rapporto buyer seller eh finito
+        delete(proposalTime[msg.sender]); 
+        delete(proposalShipper[msg.sender]);
+        delete(proposalPrice[msg.sender]);
+        delete(proposalSeller[msg.sender]);
+    }
+    function partial_refund() public payable returns(uint ret){
+        require((proposalStatus[msg.sender]==StatusType.Paid),"Status non permette");
+        refund = uint(int(int((( proposalPrice[msg.sender] )*percent)/10 ))); 
+        notRefund=uint(int(int((( proposalPrice[msg.sender] )*(100-percent))/100))); 
+        payable(msg.sender).transfer(refund);
+        payable(proposalSeller[msg.sender]).transfer(notRefund);
+        // cancellare tutto perche il rapporto buyer seller eh finito
+        hasProposal[msg.sender]=false;
+        proposalStatus[msg.sender]=StatusType.Start;
+        delete(proposalTime[msg.sender]); 
+        delete(proposalShipper[msg.sender]);
+        delete(proposalPrice[msg.sender]);
+        delete(proposalSeller[msg.sender]);
+    }
+    
+    
+}

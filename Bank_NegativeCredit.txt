@@ -1,0 +1,40 @@
+//SPDX-License-Identifier: UNLICENSED
+
+pragma solidity >= 0.6;
+
+contract bank{
+    int private limit;
+    mapping (address => int) private balances;
+    int dummy;
+
+    receive() external payable{
+        balances[msg.sender]+=int(msg.value);
+    }
+    function deposit() payable public{
+        balances[msg.sender]+=int(msg.value);
+    }
+    function withdraw(uint q) public{
+        require(balances[msg.sender]>=int(q));
+        balances[msg.sender]=balances[msg.sender]-int(q);
+        (payable(msg.sender)).transfer(q);
+    }
+    function tell_balance() view public returns(int){
+        return(balances[msg.sender]);
+    }
+    function deposit_on_another(address r) payable public {
+        balances[r]+=int(msg.value);
+    } 
+    function internal_transfer(uint q,address R) public{
+        require(balances[msg.sender]>=int(q));
+        balances[msg.sender]-=int(q);
+        balances[R]+=int(q);
+
+    }
+    function withdraw_in_red (uint quantity) public {
+        limit = (int(int(((address(this)).balance)*8)/10));
+        require(limit>=int(quantity));
+        dummy = balances[msg.sender]-int(quantity);
+        balances[msg.sender]=(dummy);
+        (payable(msg.sender)).transfer(quantity);
+    }
+}

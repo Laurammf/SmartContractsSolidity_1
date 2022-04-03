@@ -1,0 +1,93 @@
+//SPDX-License-Identifier: UNLICENSED
+pragma solidity >=0.6;
+
+// require((),);
+// You are using an `https` connection. Please switch to `http` if 
+// you are using Remix against an `http Web3 provider` or allow Mixed Content in your browser.
+
+// osservazione: faccio tutto public qua per debuggare 
+contract vacation{ 
+    address payable public proprietario;
+    address payable public turista;
+    address public arbitro;
+    uint public doorCode;
+    uint public price;
+    uint public numberWeeks;
+    uint public paid;
+    uint public status;
+    uint public arrival;
+
+// prezzo settimanale, l’indirizzo dell’arbitro e il doorCode (uint). Imposta lo status a 1.
+    constructor(uint p, address a, uint dc){
+        arbitro =a;
+        price=p;
+        doorCode=dc;
+        status=1;
+        proprietario=payable(msg.sender);
+    }
+
+// Ricevi il numero di settimane e come pagamento almeno il 20% del prezzo moltiplicato dal numero di 
+// settimane. Memorizza l’indirizzo del turista e l’ammontare pagato. Imposta lo status a 2.
+    function request_reservation(uint nweek, uint deposit) public{
+        require(((((price*nweek)*20)/100)<=deposit),"Il deposito none sufficient per coprire 20% del prezzo finale!");
+        require((msg.sender!=arbitro),"Larbitro deve prenotare altro albergo!"); // per evvitare casino
+        numberWeeks=nweek;
+        turista = payable(msg.sender);
+        paid = deposit;
+        status = 2;
+    }
+
+// Attivabile dal turista quando status è 2 ritorna il doorCode. Memorizza il tempo. Imposta status a 3.
+    function openthedoor() public returns (uint){
+        require((msg.sender==turista),"Solo il turista puo chiamare questa funzione!");
+        require((status==2),"Lo status non permette");
+        status = 3;
+        arrival=block.timestamp;
+        return doorCode;
+    }
+
+// Attivabile dal turista quando status è 3, vuole il pagamento del resto e manda i soldi al proprietario. Il 
+// doorCode diventa permanente (non serve fare nulla, metti solo un commento, supponiamo venga fatto da 
+// qualche programma esterno). Imposta status a 1
+    // function paytherest(uint deposit) public {
+    //     require((msg.sender==turista),"Non sei il turista"); // potrei lasciare che uno paga la riserva per il turista? Potrei. Ma voglio evvitare imbrogli.
+    //     require((status==3),"Status non permette");
+    //     require(((price*numberWeeks)-paid<=deposit));
+    //     proprietario.transfer(deposit);
+    //     status =1;
+    //     // OCCHIO-> il doorCode diventa permanente.
+    // }
+    function paytherest() public payable{
+        require((msg.sender==turista),"Non sei il turista"); // potrei lasciare che uno paga la riserva per il turista? Potrei. Ma voglio evvitare imbrogli.
+        require((status==3),"Status non permette");
+        require(((price*numberWeeks)-paid<=msg.value));
+        proprietario.transfer(msg.value);
+        proprietario.transfer(((address(this)).balance)); // la cauzione bisogna transferirla ANCHE 
+        status =1;
+        // OCCHIO-> il doorCode diventa permanente.
+    }
+
+// Attivabile dal turista quando status è 3 e entro 20 minuti dal codice. Imposta status a 4. 
+    function reclaim() public{
+        require(((msg.sender)==turista),"Solo il turista puo chiamare la funzione!");
+        // OKO CHANGE TIME HERE TO 1200 SECONDS
+        require((block.timestamp<=arrival+ 1200 seconds),"Pui di 20 minuti del arrivo se ne sono passati");
+        require((status==3), "Status non permette");
+        status=4;
+    }
+// Attivabile dall’arbitro quando status è 4 e richiede un numero da 0 a 100. Questa è la percentuale 
+// dell’anticipo che va al proprietario, il resto va al turista. Imposta status a 1.
+
+// osservazione importante: qui ho capito che anticipo significa paid 
+    function arbitral_tribunal(uint percent) public payable{
+        require(((msg.sender)==arbitro),"Solo larbitro puo chiamare la funzione");
+        require(((percent<=100)&&(percent>=0)), "Per favore 0<=percent<=100");
+        require((status==4),"Status non permette");
+        status = 1;
+        turista.transfer((((address(this)).balance)*percent)/100);
+        proprietario.transfer((((address(this)).balance)-(((address(this)).balance)*percent)/100)); // *
+// * perche non faccio ...transfer(((numberWeeks*price)*(100- percent)))/100) ?
+// perche la divisione qua none perfetta. qundi diciamo potrebbe essere che ci sia un piccolo resto che 
+// rimane nel contratto e sono soldi persi. 
+    }
+}

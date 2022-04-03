@@ -1,0 +1,140 @@
+//SPDX-License-Identifier: UNLICENSED
+
+pragma solidity >= 0.6;
+
+
+
+*/
+// last_time_voted[msg.sender] 
+contract DAO{
+    uint public total_shares;
+    uint public price;
+    uint public voting_time;
+    mapping(address=>uint) public shares; // mappa lindirizzo del proprietario e quanti azione ha
+    mapping(string=> address payable) public voting_to; //mappa votazione e indirizzo da pagare
+    mapping(string=> uint) public voting_quantity; // il quantitativo a essere pagato alla fine della vot
+    mapping(string=> uint) public voting_close; // il tempo al quale la vot si chiude. se none partita, non esiste: 0
+    mapping(string=> uint) public voting_yes;
+    mapping(string=> uint) public voting_no;
+    mapping(string=>mapping(address=>bool)) public voting_already; 
+    mapping(string=> bool) public voting_apply;
+    mapping(address=>uint) public last_time_voted;
+    mapping(address=>uint) public last_time_buy;
+
+    constructor(uint _price, uint _voting_time){
+        require(_price>0,"Prezzo deve essere positivo!");
+        total_shares=0;
+        price=_price;
+        voting_time=_voting_time;
+    }
+
+    function buy_shares() public payable{
+        require(msg.value>=price, "Stai pagando troppo poco");
+            uint q = msg.value/price;
+            total_shares+=q;
+            shares[msg.sender]+=q;
+            last_time_buy[msg.sender]=block.timestamp;
+    }
+    function transfer_shares(uint quantity, address to) public{
+        require(shares[msg.sender]>=quantity,"Non hai ababstanza azioni!");
+    //    require(!voted_lastmin[to]==true, "il destinatario ha votato lastmin e non puo ricevere azioni");
+        require(quantity>0); 
+        require((last_time_voted[msg.sender]<(block.timestamp-voting_time)), "Non si puo votare e dopo trasferire lazione!");
+        shares[msg.sender]-=quantity;
+        shares[to]+=quantity;
+    }
+    function propose_vote(string memory s, address payable to, uint quantity) public{
+        require(voting_close[s]==0,"La votazione esiste o gia eh esistita");
+        require(shares[msg.sender]>0,"Non sei un azionista");
+        voting_to[s]=to;
+        voting_quantity[s]=quantity;
+        voting_close[s]=block.timestamp+voting_time;
+        voting_yes[s]=0;
+        voting_no[s]=0;
+// potremmo anche controllare che un azionista fa UNA proposta e basta
+// uno puo votare zero per cose che non spostano soldi, quindi quantity 0
+    }
+    function vote_yes(string memory s) public{
+        require(! voting_already[s][msg.sender], "Hai gia votato!");
+        require(shares[msg.sender]>0,"Non sei un azionista");        
+        require(voting_close[s]>0,"La votazione non esiste");
+        require(voting_close[s]>=block.timestamp,"La votazione eh chiusa, tempo scaduto!");
+        require((last_time_buy[msg.sender]+60 seconds<voting_close[s]), "Hai comprato azione/i poco fa!");
+        if (block.timestamp + 60 seconds< voting_close[s]){
+            voting_yes[s]+=shares[msg.sender];
+            voting_already[s][msg.sender]=true;
+            last_time_voted[msg.sender]=block.timestamp;
+        } else {
+            voting_yes[s]+=shares[msg.sender];
+            voting_already[s][msg.sender]=true;
+            last_time_voted[msg.sender]=block.timestamp;
+        }
+    }
+    
+    function vote_no(string memory s) public{
+        require(! voting_already[s][msg.sender], "Hai gia votato!");
+        require(shares[msg.sender]>0,"Non sei un azionista");        
+        require(voting_close[s]>0,"La votazione non esiste");
+        require(voting_close[s]>=block.timestamp,"La votazione eh chiusa, tempo scaduto!");
+        require((last_time_buy[msg.sender]+60 seconds<voting_close[s]), "Hai comprato azione/i poco fa!");
+        if (block.timestamp + 60 seconds< voting_close[s]){ 
+            voting_no[s]+=shares[msg.sender];
+            voting_already[s][msg.sender]=true;
+            last_time_voted[msg.sender]=block.timestamp;
+        }else {
+            voting_no[s]+=shares[msg.sender];
+            voting_already[s][msg.sender]=true;
+            last_time_voted[msg.sender]=block.timestamp;
+        }
+    }
+    function get_results(string memory s) public view returns(bool){ 
+        require(voting_close[s]>0, "Votazione non mai esistita");
+        require((block.timestamp>voting_close[s]) || (voting_yes[s]>total_shares/2) || (voting_no[s]>=(total_shares+1)/2), "Non ce maggioranza o votazione none chiusa");
+        return(voting_yes[s]>voting_no[s]);
+    }
+    function force_results(string memory s) public returns(bool){
+// ritorna vero se ce maggioranza di yes e trasnferiscne effeticamente dei soldi
+    require(! voting_apply[s], "Risultato gia fatto eseguito");
+    require(voting_close[s]>0, "Votazione non mai esistita");
+    require((block.timestamp>voting_close[s]) || (voting_yes[s]>total_shares/2) || (voting_no[s]>=(total_shares+1)/2), "Non ce maggioranza o votazione none chiusa");
+    if ((get_results(s)) && (voting_quantity[s]>0) && ((address(this).balance)>=voting_quantity[s])){
+        voting_to[s].transfer(voting_quantity[s]);
+        return true;
+    } else {
+        return false;
+    }
+    }
+ 
+
+    function proposevote_timeorqty(bool isTime) public{
+        require(shares[msg.sender]>0,"Non sei un azionista");
+     //   require((voting_to[current_voting[true]] == address(0x0)), "Esiste gia una votazione in corso!"); 
+        if (isTime==true){ // cambieremmo il tempo
+            require(voting_close["changetime"]==0,"La votazione esiste o gia eh esistita");
+            voting_close["changetime"]=block.timestamp+ voting_time;
+            voting_yes["changetime"]=0;
+            voting_no["changetime"]=0;
+        } else { // cambieremmo quantity
+            require(voting_close["changeprice"]==0,"La votazione esiste o gia eh esistita");
+            voting_close["changeprice"]=block.timestamp+ voting_time;
+            voting_yes["changeprice"]=0;
+            voting_no["changeprice"]=0;
+        }
+    }
+    function forceresults_TimeQty(bool isTime,uint timeExtent, uint newPrice) public returns(bool){
+// ritorna vero se ce maggioranza di yes e trasnferiscne effeticamente dei soldi
+        if (isTime==true){ // cambieremmo il tempo
+            require(! voting_apply["changetime"], "Risultato gia fatto eseguito");
+            require(voting_close["changetime"]>0, "Votazione non mai esistita");
+            require((block.timestamp>voting_close["changetime"]) || (voting_yes["changetime"]>total_shares/2) || (voting_no["changetime"]>=(total_shares+1)/2), "Non ce maggioranza o votazione none chiusa");
+            require((get_results("changetime")));
+            voting_time= voting_time+timeExtent;
+        }else { // cambieremmo price
+            require(! voting_apply["changeprice"], "Risultato gia fatto eseguito");
+            require(voting_close["changeprice"]>0, "Votazione non mai esistita");
+            require((block.timestamp>voting_close["changeprice"]) || (voting_yes["changeprice"]>total_shares/2) || (voting_no["changeprice"]>=(total_shares+1)/2), "Non ce maggioranza o votazione none chiusa");
+            require((get_results("changeprice")));
+            price=newPrice;
+        }
+    }  
+}

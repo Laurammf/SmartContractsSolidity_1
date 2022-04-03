@@ -1,0 +1,28 @@
+Balances: soldi che stanno in banca 
+
+Blockchain di ethereum: eh come fosse un portafoglio mio, portafoglio esterno
+
+DAU: descentralized autonomous organization. Semplicissimo in rispetto ai veri contratti di rete.
+secondo prof sara il trend del futuro. la gestione di una azienda in maniera totalmfente automatica e decentralizzata, senza nesusno
+che abbia il vero potere in mani. I soci mettono soldi nel contratto che eh la azienda per se e possono vottare sulle decisione del contratto.
+Si puo votare su chi puo gestire, chi puo comprare azioni. Come si fa a votare per decidere se i soldi possono essere spesi verso
+un indirizzo o no. La DAU si limita a spostare i soldi verso altri contratti se la votazione dice si. 
+Altri funzioni possono essere outsourced verso altri indirizzi. 
+Persone si uniscono verso uno scopo, crowdfunding. Quando hanno raggiunto, spostano i soldi verso un indirizzo e finito. 40 millioni per comprare una
+copia della costituzioni americana, hanno perso lasta. Asta di sotherby di Londra. 17000 persona, DAO scopo unico di comprare la 
+copia della costituzioni americana. 
+
+
+la votazione 3 cose:
+un testo, una stringa, per identificare una votazione, potrebbero esserci piu votazione in corso e proposte in corso
+volendo uno puo scrivere la proposizione, ma copsta tanto, quindi conviene pubblicare un pdf, fare lash pdf e come testo mettere pdf del testo
+fare LURL del pdf, oppure il nome della votazione. 
+uno quantitativo
+un indirizzo 
+
+funzione che quando si propone la votazione blocca il quantitativo di soldi necessario, ma eh pericooso perche 
+qualunque azionista puo proporre 80 votazione e bloccare tutti i soldi della banca 
+
+
+
+variazioni: aste, auction per vendere qualcosa. le lotterie su smart conttract. 

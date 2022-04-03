@@ -1,0 +1,125 @@
+//SPDX-License-Identifier: UNLICENSED
+pragma solidity >=0.6;
+
+interface ERC20Interface {
+    function totalSupply() external view returns (uint);
+    function balanceOf(address tokenOwner) external view returns (uint balance);
+    function transfer(address to, uint tokens) external returns (bool success);
+
+    function allowance(address tokenOwner, address spender) external view returns (uint remaining);
+    function approve(address spender, uint tokens) external returns (bool success);
+    function transferFrom(address from, address to, uint tokens) external returns (bool success);
+    event Transfer(address indexed from, address indexed to, uint tokens);
+    event Approval(address indexed tokenOwner, address indexed spender, uint tokens);
+}
+
+contract Lauhryvnia is ERC20Interface{
+    string public name = "Lauhryvnia";
+    string public symbol = "LHR";
+    uint public supply; // corrisponde a totalshares
+    address public founder;
+    mapping(address=>uint) balances;
+    mapping(address=>mapping(address=>uint)) private allowed;
+    uint public voting_time;
+    mapping(string=> uint) public voting_quantity;
+    mapping(string=> uint) public voting_close;
+    mapping(string=> uint) public voting_yes;
+    mapping(string=> uint) public voting_no;
+    mapping(string=>mapping(address=>bool)) public voting_already; 
+    mapping(string=> bool) public voting_apply;
+
+
+    constructor(uint qty, uint _voting_time) {
+        supply=qty;
+        founder = msg.sender;
+        balances[founder]=supply;
+        voting_time=_voting_time;
+    }
+
+    function totalSupply() public view override returns (uint){
+        return(supply);
+}
+
+    function balanceOf(address tokenOwner) public view override returns (uint){
+        return(balances[tokenOwner]);
+    }
+    
+    function transfer(address to, uint tokens) public override returns(bool){
+        require(tokens>0 && balances[msg.sender]>=0);
+        balances[msg.sender]=balances[msg.sender]-tokens;
+        balances[to]=balances[to]+tokens;
+        emit Transfer(msg.sender,to,tokens);
+        return true;
+    }
+
+    function allowance(address tokenOwner, address spender) public view override returns (uint){
+        return(allowed[tokenOwner][spender]);
+    }
+    function approve(address spender, uint tokens) public override returns (bool){
+       // require(tokens>0, "tokens debbe essere positivo");
+        require(balances[msg.sender]>=tokens, "bisogna avere i tokens gia' disponibile");
+        allowed[msg.sender][spender]=tokens;
+        emit Approval(msg.sender, spender, tokens);
+        return(true);
+    }
+    function transferFrom(address from, address to, uint tokens) public override returns (bool){
+        require(balances[msg.sender]>=tokens, "bisogna avere i tokens gia' disponibile");
+        require(allowed[from][msg.sender]>=tokens, "Autorizzazioni insufficienti");
+        require(balances[from]>=tokens, "Tokens insufficienti");
+        balances[from]-=tokens;
+        balances[to]+=tokens;
+        emit Transfer(from,to,tokens);
+        return(true);
+    }
+    function reduce_LHR(uint reduction) public{
+        approve(msg.sender,reduction);
+        transferFrom(msg.sender,address(0),reduction);
+    }
+// tolgo address payable to perche lindirizzo di pagamento sara il proprio contratto
+// tolgo voting_to come struttura dati perche lindirizzo di pagamento eh questo proprio contratto
+    function propose_vote(string memory s, uint quantity) public{
+        require(voting_close[s]==0,"La votazione esiste o gia eh esistita");
+        require(balances[msg.sender]>0,"Non sei un azionista");
+        voting_quantity[s]=quantity;
+        voting_close[s]=block.timestamp+voting_time;
+        voting_yes[s]=0;
+        voting_no[s]=0;
+// potremmo anche controllare che un azionista fa UNA proposta e basta
+// uno puo votare zero per cose che non spostano soldi, quindi quantity 0
+    }
+    function vote_yes(string memory s) public{
+        require(! voting_already[s][msg.sender], "Hai gia votato!");
+        require(balances[msg.sender]>0,"Non sei un azionista");        
+        require(voting_close[s]>0,"La votazione non esiste");
+        require(voting_close[s]<block.timestamp,"La votazione eh chiusa, tempo scaduto!");
+        voting_yes[s]+=balances[msg.sender];
+        voting_already[s][msg.sender]=true;
+    }
+    
+    function vote_no(string memory s) public{
+        require(! voting_already[s][msg.sender], "Hai gia votato!");  
+        require(balances[msg.sender]>0,"Non sei un azionista");     
+        require(voting_close[s]>0,"La votazione non esiste");
+        require(voting_close[s]<block.timestamp,"La votazione eh chiusa, tempo scaduto!");
+        voting_no[s]+=balances[msg.sender];
+        voting_already[s][msg.sender]=true;
+    }
+    function get_results(string memory s) public view returns(bool){ 
+        require(voting_close[s]>0, "Votazione non mai esistita");
+        require((block.timestamp>voting_close[s]) || (voting_yes[s]>supply/2) || (voting_no[s]>=(supply+1)/2), "Non ce maggioranza o votazione none chiusa");
+        return(voting_yes[s]>voting_no[s]);
+    }
+    
+    function force_results(string memory s) public returns(bool){
+// ritorna vero se ce maggioranza di yes e trasnferiscne effeticamente dei soldi
+    require(! voting_apply[s], "Risultato gia fatto eseguito");
+    require(voting_close[s]>0, "Votazione non mai esistita");
+    require((block.timestamp>voting_close[s]) || (voting_yes[s]>supply/2) || (voting_no[s]>=(supply+1)/2), "Non ce maggioranza o votazione none chiusa");
+    if ((get_results(s)) && (voting_quantity[s]>0) && ((address(this).balance)>=voting_quantity[s])){
+        supply+=voting_quantity[s]; // aggiunge tokens al quantitativo
+        return true;
+    } else {
+        return false;
+    }
+    }
+}

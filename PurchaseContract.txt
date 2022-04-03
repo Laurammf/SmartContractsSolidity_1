@@ -1,0 +1,100 @@
+//SPDX-License-Identifier: UNLICENSED
+//
+//Cambia il contratto purchase inserendo, durante il deploy, 
+//un ammontare minimo di wei che il buyer deve offrire per fare la proposta.
+
+
+pragma solidity >=0.6;
+contract purchase{
+    address payable public seller;
+    address payable public buyer;
+    address public shipper;
+    address public newshipper_S;
+    address public newshipper_B;
+    uint public bonifico_min;
+    uint private refund;
+    enum StatusType {Start,Paid,Accepted}
+    StatusType public status;
+
+    constructor(address s, uint min){
+        seller=payable(msg.sender);
+        status = StatusType.Start;
+        shipper = s;
+        bonifico_min=min;
+    }
+// prendo in considerazione che lutente metera linput solo in wei e non in ethereum
+// idealmente controlerei se linput viene in wei o ethereum, ma non riesco
+    function propose_and_pay() public payable{
+        require((status==StatusType.Start)&& (msg.value>=bonifico_min));
+        buyer=payable(msg.sender);
+        status=StatusType.Paid;
+    //    proposalTime=block.timestamp;
+    }
+    // questo proposalTime lascio stare perche mi viene errore, e per il compito non serve
+
+//metto condizione che il venditore non si puio cambiare in mezzo
+// a una transazione per evvitare che uno mi imbrogli
+    function change_seller(address newseller) public payable{
+        require((status==StatusType.Start));
+        seller = payable(newseller);
+    }
+
+// ho deciso fare rimborso di 70%
+    function partial_refund() public returns(uint ret){
+        require((msg.sender==buyer)&&(status==StatusType.Paid));
+        //refund = uint(int(int(( (address(this)).balance )/10)*7)); 
+        refund = uint(int(int(( (address(this)).balance )*70)/100)); 
+        return refund;
+       // refund.propose_and_pay();
+        //buyer.accept();
+       // buyer.transfer(refund);
+    }
+
+    function change_shipper(address newshipper) public{
+        require((msg.sender==seller)||(msg.sender==buyer));
+        if ((msg.sender==seller)){
+            newshipper_S=newshipper;
+        } else if ((msg.sender==buyer)){
+            newshipper_B=newshipper;
+        } else {}
+        if (newshipper_B==newshipper_S){
+            shipper= newshipper_B;
+        }
+    }
+
+
+    function reject() public{
+        require(msg.sender==seller);
+        require(status==StatusType.Paid);
+        status = StatusType.Start;
+   //     buyer.transfer( (address(this)).balance );
+    }
+    function accept() public{
+        require(msg.sender==seller);
+        require(status==StatusType.Paid);
+        status = StatusType.Accepted;
+     //   seller.transfer( (address(this)).balance ); // OKO
+    }
+    function delivered() public{
+        require(status==StatusType.Accepted);
+        require(msg.sender==shipper);
+        status = StatusType.Start;
+        seller.transfer( (address(this)).balance );
+    }
+    function not_delivered() public{
+        require(status==StatusType.Accepted);
+        require(msg.sender==shipper);
+        status = StatusType.Start;
+        buyer.transfer( (address(this)).balance );
+    }
+    function reclaim() public{
+        require(status==StatusType.Accepted || status==StatusType.Paid);
+        require(msg.sender==buyer);
+    //    require(block.timestamp>=(proposalTime+(180)));
+        status=StatusType.Start;
+        buyer.transfer((address(this)).balance);
+    }
+
+
+    
+}

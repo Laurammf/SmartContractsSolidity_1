@@ -1,0 +1,56 @@
+//SPDX-License-Identifier: UNLICENSED
+
+pragma solidity >= 0.6;
+
+contract bank{
+    uint public fee;
+    mapping (address => uint) private balances;  
+    address payable private seller;
+    address payable private buyer;
+
+    constructor(uint f){
+        seller=payable(msg.sender);
+        fee = f;
+    }
+    receive() external payable{
+        balances[msg.sender]+=msg.value-fee;
+    }
+    function deposit() payable public{
+        require((balances[msg.sender]+msg.value-fee)>=0);
+// per evvitare una situazione assurda dove il fee sia molto alto, il saldo su conto 
+// E il bonifico molto piccoli e dopo loperazione il saldo diventa negativo
+        balances[msg.sender]+=msg.value-fee;
+    }
+    function withdraw(uint q) public{
+        require(balances[msg.sender]>=q+fee);
+        balances[msg.sender]-=(q+fee);
+        (payable(msg.sender)).transfer(q);
+    }
+    function tell_balance() view public returns(uint){
+        return(balances[msg.sender]);
+    }
+    function deposit_on_another(address r) payable public {
+        balances[r]+=msg.value;
+    } 
+    function internal_transfer(uint q,address R) public{
+        require(balances[msg.sender]>=(q+fee));
+        balances[msg.sender]-=(q+fee);
+        balances[R]+=q;
+
+    }
+    function external_transfer(address receiver, uint quantity) public{
+        require(balances[msg.sender]>=(quantity+fee));
+        balances[msg.sender]-=quantity-fee;
+        balances[receiver]+=quantity;
+    }
+    function take_the_money_and_run() payable public{
+        require(msg.sender==seller);
+        seller.transfer(((address(this)).balance)-fee);
+    }
+    
+    function set_fee(uint f) public{
+        require(msg.sender==seller);
+        fee=f;
+    }
+
+}
